@@ -1,0 +1,14 @@
+{
+  "name": "webtoon-tracking",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "send-dashboard-mail": "node send_dashboard_capture.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.2",
+    "googleapis": "^171.4.0",
+    "playwright": "^1.60.0",
+    "sharp": "^0.35.3"
+  }
+}
