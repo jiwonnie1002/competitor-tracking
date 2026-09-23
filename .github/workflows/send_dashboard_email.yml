@@ -1,26 +1,29 @@
-   name: 대시보드 메일 발송
+name: 대시보드 메일 발송
 
-   on:
-     workflow_dispatch:
+on:
+  schedule:
+    - cron: '23 22 * * *'
 
-   jobs:
-     send-dashboard-email:
-       runs-on: ubuntu-latest
+  workflow_dispatch:
 
-       steps:
-         - name: 저장소 가져오기
-           uses: actions/checkout@v4
+jobs:
+  send-dashboard-email:
+    runs-on: ubuntu-latest
 
-         - name: Node.js 설정
-           uses: actions/setup-node@v4
-           with:
-             node-version: '20'
+    steps:
+      - name: 저장소 가져오기
+        uses: actions/checkout@v4
 
-         - name: Playwright 패키지 설치
-           run: npm install playwright@1.60.0
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-         - name: Chromium 브라우저 설치
-           run: npx playwright install chromium --with-deps
+      - name: Playwright 패키지 설치
+        run: npm install playwright@1.60.0
 
-         - name: 대시보드 캡쳐 및 메일 발송
-           run: node send_dashboard_capture.js
+      - name: Chromium 브라우저 설치
+        run: npx playwright install chromium --with-deps
+
+      - name: 대시보드 캡쳐 및 메일 발송
+        run: node send_dashboard_capture.js
