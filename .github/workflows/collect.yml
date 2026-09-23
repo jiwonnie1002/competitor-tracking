@@ -1,105 +1,289 @@
 name: 경쟁사 랭킹 수집
+concurrency:
+  group: collect-history-main
+  cancel-in-progress: false
 on:
   schedule:
     - cron: '0 15 * * *'
   workflow_dispatch:
-
+    inputs:
+      run_ridi:
+        description: '리디 수집'
+        type: boolean
+        default: true
+      run_kakao:
+        description: '카카오 수집'
+        type: boolean
+        default: true
+      run_naver:
+        description: '네이버 수집'
+        type: boolean
+        default: true
+      run_lezhin:
+        description: '레진 수집'
+        type: boolean
+        default: true
+      run_bomtoon:
+        description: '봄툰 수집'
+        type: boolean
+        default: true
 jobs:
-  collect:
+  ridi:
+    if: ${{ github.event_name == 'schedule' || inputs.run_ridi }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 40
     permissions:
       contents: write
-
     steps:
-      - name: 저장소 체크아웃
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Node.js 설치
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: 루트 패키지 설치
-        run: npm install
-
-      - name: 리디 패키지 설치
+      - name: 패키지 설치
         working-directory: ./ridi
         run: npm install
-
-      - name: 카카오 패키지 설치
-        working-directory: ./kakao
-        run: npm install
-
-      - name: 네이버 패키지 설치
-        working-directory: ./naver
-        run: npm install
-
-      - name: 레진 패키지 설치
-        working-directory: ./lezhin
-        run: npm install playwright
-
-      - name: 봄툰 패키지 설치
-        working-directory: ./bomtoon
-        run: npm install playwright
-
-      - name: Playwright 브라우저 설치
-        run: |
-          cd ridi && npx playwright install chromium --with-deps
-          cd ../kakao && npx playwright install chromium --with-deps
-          cd ../naver && npx playwright install chromium --with-deps
-          cd ../lezhin && npx playwright install chromium --with-deps
-          cd ../bomtoon && npx playwright install chromium --with-deps
-
+      - name: Playwright 설치
+        working-directory: ./ridi
+        run: npx playwright install chromium --with-deps
       - name: 리디 로그인 세션 복원
+        env:
+          RIDI_AUTH_GZIP_B64: ${{ secrets.RIDI_AUTH_GZIP_B64 }}
         run: |
           mkdir -p ridi/.auth
-          echo '${{ secrets.RIDI_AUTH_GZIP_B64 }}' | base64 -d | gunzip > ridi/.auth/ridi_auth.json
-
-      - name: 카카오 로그인 세션 복원
-        run: |
-          mkdir -p kakao/.auth
-          echo '${{ secrets.KAKAO_AUTH_JSON }}' | base64 -d > kakao/.auth/kakao_auth.json
-
-      - name: 네이버 로그인 세션 복원
-        run: |
-          mkdir -p naver/.auth
-          echo '${{ secrets.NAVER_AUTH_JSON }}' | base64 -d > naver/.auth/naver_auth.json
-
+          printf '%s' "$RIDI_AUTH_GZIP_B64" | base64 -d | gzip -d > ridi/.auth/ridi_auth.json
+          test -s ridi/.auth/ridi_auth.json
+          node -e "JSON.parse(require('fs').readFileSync('ridi/.auth/ridi_auth.json','utf8')); console.log('RIDI auth JSON restored')"
       - name: 리디 랭킹 수집
         working-directory: ./ridi
         run: node app_ridi.js
-
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-ridi
+          path: ridi/output_ridi/
+          retention-days: 1
+  kakao:
+    if: ${{ github.event_name == 'schedule' || inputs.run_kakao }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 패키지 설치
+        working-directory: ./kakao
+        run: npm install
+      - name: Playwright 설치
+        working-directory: ./kakao
+        run: npx playwright install chromium --with-deps
+      - name: 카카오 로그인/성인 세션 복원
+        env:
+          KAKAO_AUTH_GZIP_B64: ${{ secrets.KAKAO_AUTH_GZIP_B64 }}
+          KAKAO_SESSION_STORAGE_GZIP_B64: ${{ secrets.KAKAO_SESSION_STORAGE_GZIP_B64 }}
+        run: |
+          mkdir -p kakao/.auth
+          if [ -n "$KAKAO_AUTH_GZIP_B64" ]; then
+            printf '%s' "$KAKAO_AUTH_GZIP_B64" | base64 -d | gzip -d > kakao/.auth/kakao_auth.json
+            test -s kakao/.auth/kakao_auth.json
+            node -e "JSON.parse(require('fs').readFileSync('kakao/.auth/kakao_auth.json','utf8')); console.log('KAKAO auth JSON restored')"
+          else
+            echo "KAKAO_AUTH_GZIP_B64 secret 없음 - 비로그인 기준으로 진행"
+          fi
+          if [ -n "$KAKAO_SESSION_STORAGE_GZIP_B64" ]; then
+            printf '%s' "$KAKAO_SESSION_STORAGE_GZIP_B64" | base64 -d | gzip -d > kakao/.auth/kakao_session_storage.json
+            test -s kakao/.auth/kakao_session_storage.json
+            node -e "JSON.parse(require('fs').readFileSync('kakao/.auth/kakao_session_storage.json','utf8')); console.log('KAKAO sessionStorage JSON restored')"
+          else
+            echo "KAKAO_SESSION_STORAGE_GZIP_B64 secret 없음 - 성인 sessionStorage 없이 진행"
+          fi
       - name: 카카오 랭킹 수집
         working-directory: ./kakao
         run: node app_kakao.js
-
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-kakao
+          path: kakao/output_kakao/
+          retention-days: 1
+  naver:
+    if: ${{ github.event_name == 'schedule' || inputs.run_naver }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 패키지 설치
+        working-directory: ./naver
+        run: npm install
+      - name: Playwright 설치
+        working-directory: ./naver
+        run: npx playwright install chromium --with-deps
+      - name: 네이버 로그인/성인 세션 복원
+        env:
+          NAVER_AUTH_GZIP_B64: ${{ secrets.NAVER_AUTH_GZIP_B64 }}
+          NAVER_SESSION_STORAGE_GZIP_B64: ${{ secrets.NAVER_SESSION_STORAGE_GZIP_B64 }}
+          NAVER_LOCAL_STORAGE_GZIP_B64: ${{ secrets.NAVER_LOCAL_STORAGE_GZIP_B64 }}
+          NAVER_AUTH_JSON: ${{ secrets.NAVER_AUTH_JSON }}
+        run: |
+          mkdir -p naver/.auth
+          if [ -n "$NAVER_AUTH_GZIP_B64" ]; then
+            printf '%s' "$NAVER_AUTH_GZIP_B64" | base64 -d | gzip -d > naver/.auth/naver_auth.json
+            test -s naver/.auth/naver_auth.json
+            node -e "JSON.parse(require('fs').readFileSync('naver/.auth/naver_auth.json','utf8')); console.log('NAVER auth JSON restored')"
+          elif [ -n "$NAVER_AUTH_JSON" ]; then
+            printf '%s' "$NAVER_AUTH_JSON" | base64 -d > naver/.auth/naver_auth.json
+            test -s naver/.auth/naver_auth.json
+            node -e "JSON.parse(require('fs').readFileSync('naver/.auth/naver_auth.json','utf8')); console.log('NAVER auth JSON restored from legacy secret')"
+          else
+            echo "NAVER_AUTH_GZIP_B64 / NAVER_AUTH_JSON secret 없음 - 비로그인 기준으로 진행"
+          fi
+          if [ -n "$NAVER_SESSION_STORAGE_GZIP_B64" ]; then
+            printf '%s' "$NAVER_SESSION_STORAGE_GZIP_B64" | base64 -d | gzip -d > naver/.auth/naver_session_storage.json
+            test -s naver/.auth/naver_session_storage.json
+            node -e "JSON.parse(require('fs').readFileSync('naver/.auth/naver_session_storage.json','utf8')); console.log('NAVER sessionStorage JSON restored')"
+          else
+            echo "NAVER_SESSION_STORAGE_GZIP_B64 secret 없음 - 성인 sessionStorage 없이 진행"
+          fi
+          if [ -n "$NAVER_LOCAL_STORAGE_GZIP_B64" ]; then
+            printf '%s' "$NAVER_LOCAL_STORAGE_GZIP_B64" | base64 -d | gzip -d > naver/.auth/naver_local_storage.json
+            test -s naver/.auth/naver_local_storage.json
+            node -e "JSON.parse(require('fs').readFileSync('naver/.auth/naver_local_storage.json','utf8')); console.log('NAVER localStorage JSON restored')"
+          else
+            echo "NAVER_LOCAL_STORAGE_GZIP_B64 secret 없음 - 성인 localStorage 없이 진행"
+          fi
       - name: 네이버 랭킹 수집
         working-directory: ./naver
         run: node app.js
-
-      - name: 레진 랭킹 수집
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-naver
+          path: naver/output/
+          retention-days: 1
+  lezhin:
+    if: ${{ github.event_name == 'schedule' || inputs.run_lezhin }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 패키지 설치
         working-directory: ./lezhin
+        run: npm install
+      - name: 레진 랭킹 수집 (공식 API)
+        working-directory: ./lezhin
+        env:
+          LEZHIN_API_KEY: ${{ secrets.LEZHIN_API_KEY }}
         run: node app_lezhin.js
-        continue-on-error: true
-
-      - name: 봄툰 랭킹 수집
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-lezhin
+          path: lezhin/output_lezhin/
+          retention-days: 1
+  bomtoon:
+    if: ${{ github.event_name == 'schedule' || inputs.run_bomtoon }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 패키지 설치
         working-directory: ./bomtoon
+        run: npm install sharp
+      - name: 봄툰 랭킹 수집 (공식 API)
+        working-directory: ./bomtoon
+        env:
+          BOMTOON_API_KEY: ${{ secrets.BOMTOON_API_KEY }}
         run: node app_bomtoon.js
-        continue-on-error: true
-
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-bomtoon
+          path: bomtoon/output_bomtoon/
+          retention-days: 1
+  save-and-upload:
+    needs: [ridi, kakao, naver, lezhin, bomtoon]
+    if: ${{ always() && contains(needs.*.result, 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 루트 패키지 설치
+        run: npm install
+      - name: 아티팩트 다운로드 (ridi)
+        if: ${{ needs.ridi.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: output-ridi
+          path: ridi/output_ridi/
+      - name: 아티팩트 다운로드 (kakao)
+        if: ${{ needs.kakao.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: output-kakao
+          path: kakao/output_kakao/
+      - name: 아티팩트 다운로드 (naver)
+        if: ${{ needs.naver.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: output-naver
+          path: naver/output/
+      - name: 아티팩트 다운로드 (lezhin)
+        if: ${{ needs.lezhin.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: output-lezhin
+          path: lezhin/output_lezhin/
+      - name: 아티팩트 다운로드 (bomtoon)
+        if: ${{ needs.bomtoon.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: output-bomtoon
+          path: bomtoon/output_bomtoon/
       - name: 히스토리 저장 (git commit & push)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add ridi/output_ridi/history/ kakao/output_kakao/history/ naver/output/history/ lezhin/output_lezhin/history/ bomtoon/output_bomtoon/history/ || true
           git diff --staged --quiet && echo "변경사항 없음" && exit 0
-          git commit -m "auto: save crawl history $(date +'%Y-%m-%d')"
-          # push 실패 시 pull --rebase 후 재시도
-          git push || (git pull --rebase && git push)
-
+          git commit -m "auto: save crawl history $(TZ=Asia/Seoul date +'%Y-%m-%d')"
+          git push origin HEAD:main || (
+            git pull --rebase --autostash origin main &&
+            git push origin HEAD:main
+          )
       - name: 구글 드라이브 업로드
         run: node upload_to_drive.js
         env:
@@ -107,5 +291,4 @@ jobs:
           RIDI_FOLDER_ID: '1_KfveEJP_di-OseScpHG_e9bBkeNX2Kz'
           KAKAO_FOLDER_ID: '1RBGCXAyyOd_Im9udDb_ATcJ7k8ZzCtaK'
           NAVER_FOLDER_ID: '1Znl82ZsuzsoLqpsd_HPo9cJg4ZCTneWn'
-          BOMTOON_FOLDER_ID: '1bMkEe0eqg7bTkF0-ye2QUE9u3PYCvJS5'
-          LEZHIN_FOLDER_ID: '1lruBIJOX1-PBahQG1KErmvFNzywDNz3W'
+          BOMTOON_FOLDER_ID:
