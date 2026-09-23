@@ -53,6 +53,11 @@ jobs:
           cd ../lezhin && npx playwright install chromium --with-deps
           cd ../bomtoon && npx playwright install chromium --with-deps
 
+      - name: 리디 로그인 세션 복원
+        run: |
+          mkdir -p ridi/.auth
+          echo '${{ secrets.RIDI_AUTH_GZIP_B64 }}' | base64 -d | gunzip > ridi/.auth/ridi_auth.json
+
       - name: 카카오 로그인 세션 복원
         run: |
           mkdir -p kakao/.auth
