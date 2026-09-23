@@ -1,0 +1,19 @@
+.auth/
+node_modules/
+
+# output 폴더는 올리되 history JSON만 추적
+output_ridi/*.csv
+output_ridi/*.txt
+output_ridi/master/
+output_kakao/*.csv
+output_kakao/*.txt
+output_kakao/master/
+naver/output/*.csv
+naver/output/*.txt
+naver/output/master/
+
+# package 파일은 유지
+!package.json
+!package-lock.json
+# 로컬 API 키 (절대 커밋 금지)
+.env

@@ -1,0 +1,106 @@
+name: 경쟁사 랭킹 수집
+on:
+  schedule:
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node.js 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 루트 패키지 설치
+        run: npm install
+
+      - name: 리디 패키지 설치
+        working-directory: ./ridi
+        run: npm install
+
+      - name: 카카오 패키지 설치
+        working-directory: ./kakao
+        run: npm install
+
+      - name: 네이버 패키지 설치
+        working-directory: ./naver
+        run: npm install
+
+      - name: 레진 패키지 설치
+        working-directory: ./lezhin
+        run: npm install playwright
+
+      - name: 봄툰 패키지 설치
+        working-directory: ./bomtoon
+        run: npm install playwright
+
+      - name: Playwright 브라우저 설치
+        run: |
+          cd ridi && npx playwright install chromium --with-deps
+          cd ../kakao && npx playwright install chromium --with-deps
+          cd ../naver && npx playwright install chromium --with-deps
+          cd ../lezhin && npx playwright install chromium --with-deps
+          cd ../bomtoon && npx playwright install chromium --with-deps
+
+      - name: 카카오 로그인 세션 복원
+        run: |
+          mkdir -p kakao/.auth
+          echo '${{ secrets.KAKAO_AUTH_JSON }}' | base64 -d > kakao/.auth/kakao_auth.json
+
+      - name: 네이버 로그인 세션 복원
+        run: |
+          mkdir -p naver/.auth
+          echo '${{ secrets.NAVER_AUTH_JSON }}' | base64 -d > naver/.auth/naver_auth.json
+
+      - name: 리디 랭킹 수집
+        working-directory: ./ridi
+        run: node app_ridi.js
+
+      - name: 카카오 랭킹 수집
+        working-directory: ./kakao
+        run: node app_kakao.js
+
+      - name: 네이버 랭킹 수집
+        working-directory: ./naver
+        run: node app.js
+
+      - name: 레진 랭킹 수집
+        working-directory: ./lezhin
+        run: node app_lezhin.js
+        continue-on-error: true
+
+      - name: 봄툰 랭킹 수집
+        working-directory: ./bomtoon
+        run: node app_bomtoon.js
+        continue-on-error: true
+
+      - name: 히스토리 저장 (git commit & push)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ridi/output_ridi/history/ kakao/output_kakao/history/ naver/output/history/ lezhin/output_lezhin/history/ bomtoon/output_bomtoon/history/ || true
+          git diff --staged --quiet && echo "변경사항 없음" && exit 0
+          git commit -m "auto: save crawl history $(date +'%Y-%m-%d')"
+          # push 실패 시 pull --rebase 후 재시도
+          git push || (git pull --rebase && git push)
+
+      - name: 구글 드라이브 업로드
+        run: node upload_to_drive.js
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          RIDI_FOLDER_ID: '1_KfveEJP_di-OseScpHG_e9bBkeNX2Kz'
+          KAKAO_FOLDER_ID: '1RBGCXAyyOd_Im9udDb_ATcJ7k8ZzCtaK'
+          NAVER_FOLDER_ID: '1Znl82ZsuzsoLqpsd_HPo9cJg4ZCTneWn'
+          BOMTOON_FOLDER_ID: '1bMkEe0eqg7bTkF0-ye2QUE9u3PYCvJS5'
+          LEZHIN_FOLDER_ID: '1lruBIJOX1-PBahQG1KErmvFNzywDNz3W'
