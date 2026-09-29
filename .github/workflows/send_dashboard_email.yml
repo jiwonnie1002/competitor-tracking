@@ -1,7 +1,10 @@
 name: 대시보드 메일 발송
 
 on:
-    workflow_dispatch:
+  schedule:
+    - cron: '23 22 * * *'
+
+  workflow_dispatch:
 
 jobs:
   send-dashboard-email:
