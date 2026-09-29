@@ -1,0 +1,9 @@
+{
+  "name": "lezhin-crawler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "레진코믹스 공식 API 기반 랭킹 수집기",
+  "dependencies": {
+    "sharp": "^0.33.0"
+  }
+}
